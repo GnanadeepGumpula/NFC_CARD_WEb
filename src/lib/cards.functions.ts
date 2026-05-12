@@ -20,7 +20,9 @@ import {
   completeAdminPasswordReset,
   requestAdminPasswordReset,
   verifyAdminAccessToken,
+  ADMIN_EMAIL,
 } from "./admin-auth.server";
+import { ADMIN_PASSWORD } from "./admin-auth.server";
 
 export const getCardPublic = createServerFn({ method: "POST" })
   .inputValidator((data: { uniqueId: string }) =>
@@ -96,17 +98,8 @@ export const adminLogin = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data }) => {
-    // Server-side password-only admin auth
-    const envPass = process.env.ADMIN_PASSWORD || "admin1234";
-    if (data.password === envPass) {
-      return {
-        ok: true as const,
-        accessToken: signAdminToken(),
-        refreshToken: "local-admin-refresh",
-        email: null,
-      };
-    }
-    return { ok: false as const, error: "Invalid password" };
+    // Password-only UI, hidden admin email on the server.
+    return adminAuthLogin(process.env.ADMIN_EMAIL || ADMIN_EMAIL, data.password);
   });
 
 const adminCardSchema = z.object({

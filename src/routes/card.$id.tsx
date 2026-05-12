@@ -35,6 +35,7 @@ function CardPage() {
   const getWithToken = useServerFn(getCardWithToken);
   const initFn = useServerFn(initializePin);
   const unlockFn = useServerFn(unlockCard);
+  const storeEmailFn = useServerFn(storeCardRecoveryEmail);
 
   const [publicCard, setPublicCard] = useState<PublicCard | null | undefined>(
     undefined,
@@ -377,8 +378,7 @@ function CardPage() {
                         return;
                       }
                       setRecoveryBusy(true);
-                      const storeEmail = useServerFn(storeCardRecoveryEmail);
-                      const result = await storeEmail({
+                      const result = await storeEmailFn({
                         data: { uniqueId: id, token: token || "", email: recoveryEmail },
                       });
                       setRecoveryBusy(false);

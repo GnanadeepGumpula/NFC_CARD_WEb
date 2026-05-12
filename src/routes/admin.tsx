@@ -140,9 +140,9 @@ function AdminPage() {
       return;
     }
     localStorage.setItem(ADMIN_TOKEN_KEY, r.accessToken);
-    localStorage.setItem(ADMIN_EMAIL_KEY, "");
+    localStorage.setItem(ADMIN_EMAIL_KEY, r.email || DEFAULT_ADMIN_EMAIL);
     setToken(r.accessToken);
-    setAdminEmail("");
+    setAdminEmail(r.email || DEFAULT_ADMIN_EMAIL);
     setPassword("");
     setChangePasswordMsg(null);
     setResetRequestMsg(null);

@@ -10,7 +10,7 @@ export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Funny@26";
 
 function createAuthClient() {
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-    throw new Error("Missing Supabase auth configuration");
+    throw new Error("Missing SUPABASE_URL or SUPABASE_PUBLISHABLE_KEY");
   }
 
   return createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
@@ -25,7 +25,7 @@ function createAuthClient() {
 
 function createServiceAuthClient() {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error("Missing Supabase service role configuration");
+    throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
   }
 
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {

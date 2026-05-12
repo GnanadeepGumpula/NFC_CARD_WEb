@@ -5,7 +5,7 @@ import type { PublicCard, UnlockedCard, AdminCardRow } from "./card-types";
 
 const JWT_SECRET =
   process.env.JWT_SECRET || "nfc-portal-default-secret-change-in-production";
-export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin1234";
+export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Funny@26";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -16,6 +16,13 @@ export async function supabaseRestCall<T>(
   path: string,
   body?: unknown
 ): Promise<{ data: T | null; error: string | null }> {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    return {
+      data: null,
+      error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY",
+    };
+  }
+
   return new Promise((resolve) => {
     const url = new URL(path, SUPABASE_URL);
     const options = {
