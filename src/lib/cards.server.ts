@@ -16,10 +16,19 @@ export async function supabaseRestCall<T>(
   path: string,
   body?: unknown
 ): Promise<{ data: T | null; error: string | null }> {
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  if (!SUPABASE_URL) {
+    console.error("[Supabase] Missing SUPABASE_URL environment variable");
     return {
       data: null,
-      error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY",
+      error: "Server Error: Missing SUPABASE_URL. Check environment variables.",
+    };
+  }
+  
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("[Supabase] Missing SUPABASE_SERVICE_ROLE_KEY environment variable");
+    return {
+      data: null,
+      error: "Server Error: Missing SUPABASE_SERVICE_ROLE_KEY. Check environment variables.",
     };
   }
 
@@ -52,18 +61,23 @@ export async function supabaseRestCall<T>(
             resolve({ data: parsed as T, error: null });
           } else {
             const parsed = data ? JSON.parse(data) : null;
+            const errorMsg = parsed?.message || `HTTP ${res.statusCode}`;
+            console.error(`[Supabase] ${method} ${path} failed: ${errorMsg}`, { parsed });
             resolve({
               data: null,
-              error: parsed?.message || `HTTP ${res.statusCode}`,
+              error: errorMsg,
             });
           }
         } catch (e) {
-          resolve({ data: null, error: "Failed to parse response" });
+          const msg = `Failed to parse response: ${e instanceof Error ? e.message : String(e)}`;
+          console.error(`[Supabase] Parse error for ${method} ${path}:`, msg);
+          resolve({ data: null, error: msg });
         }
       });
     });
 
     req.on("error", (e) => {
+      console.error(`[Supabase] Request error for ${method} ${path}:`, e.message);
       resolve({ data: null, error: e.message });
     });
 
