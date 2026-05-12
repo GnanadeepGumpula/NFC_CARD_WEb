@@ -49,6 +49,7 @@ function CardPage() {
   const [typed, setTyped] = useState("");
   const [token, setToken] = useState<string | null>(null);
   const [showEmailRecovery, setShowEmailRecovery] = useState(false);
+  const [emailRecoveryMode, setEmailRecoveryMode] = useState<"setup" | "reset" | null>(null);
   const [recoveryEmail, setRecoveryEmail] = useState("");
   const requestResetFn = useServerFn(requestCardPinReset);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
@@ -70,6 +71,25 @@ function CardPage() {
       }
     })();
   }, [id, getPublic, getWithToken]);
+
+  useEffect(() => {
+    const expireToken = () => {
+      localStorage.removeItem(tokenKey(id));
+      setToken(null);
+      setUnlocked(null);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") expireToken();
+    };
+
+    window.addEventListener("pagehide", expireToken);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", expireToken);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [id]);
 
   // Typewriter welcome
   useEffect(() => {
@@ -129,6 +149,7 @@ function CardPage() {
       }
       // Show email recovery setup popup FIRST - don't unlock yet
       setToken(r.token);
+      setEmailRecoveryMode("setup");
       setShowEmailRecovery(true);
     } else {
       setBusy(true);
@@ -189,7 +210,7 @@ function CardPage() {
         token={token}
         cardId={id}
         onLogout={() => {
-          localStorage.removeItem(tokenKey(id));
+            localStorage.removeItem(tokenKey(id));
           setUnlocked(null);
           setPin("");
           setConfirmPin("");
@@ -197,6 +218,7 @@ function CardPage() {
           setToken(null);
           setShowEmailRecovery(false);
           setRecoveryEmail("");
+            setEmailRecoveryMode(null);
         }}
       />
     );
@@ -261,7 +283,10 @@ function CardPage() {
         {/* Reset PIN Button - Only for existing users */}
         {!publicCard?.isFirstTime && (
           <button
-            onClick={() => setShowEmailRecovery(true)}
+            onClick={() => {
+              setEmailRecoveryMode("reset");
+              setShowEmailRecovery(true);
+            }}
             className="mt-6 text-sm text-[color:var(--neon-cyan)] hover:text-[color:var(--neon-pink)] transition-colors underline-offset-2 hover:underline"
           >
             Forgot PIN? Reset it
@@ -288,12 +313,13 @@ function CardPage() {
                 <div className="flex items-center gap-3">
                   <Mail className="w-6 h-6 text-[color:var(--neon-cyan)]" />
                   <h2 className="font-display font-semibold text-lg">
-                    {publicCard.isFirstTime ? "Secure Your Access" : "Reset PIN"}
+                    {emailRecoveryMode === "setup" ? "Secure Your Access" : "Reset PIN"}
                   </h2>
                 </div>
                 <button
                   onClick={() => {
                     setShowEmailRecovery(false);
+                    setEmailRecoveryMode(null);
                     setRecoveryEmail("");
                     setRecoveryError(null);
                   }}
@@ -307,26 +333,35 @@ function CardPage() {
                 <div className="mb-4">
                   <p className="text-sm text-muted-foreground mb-2">We will send the reset link to:</p>
                   <div className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-foreground mb-4">{publicCard.recoveryEmail}</div>
+                  {emailRecoveryMode === "reset" && (
+                    <p className="text-xs text-muted-foreground">
+                      If this email is outdated, unlock the card and change it from Settings.
+                    </p>
+                  )}
                 </div>
               ) : (
-                <>
-                  <p className="text-sm text-muted-foreground mb-6">
-                    {publicCard.isFirstTime
-                      ? "Add an email to recover your PIN if you forget it. You can skip this for now."
-                      : "Add an email to receive a PIN reset link."}
-                  </p>
+                emailRecoveryMode === "reset" ? (
+                  <div className="mb-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-muted-foreground">
+                    No recovery email is saved for this card. Please contact the admin team for help.
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-muted-foreground mb-6">
+                      Add an email to recover your PIN if you forget it. You can skip this for now.
+                    </p>
 
-                  <input
-                    type="email"
-                    placeholder="your@email.com"
-                    value={recoveryEmail}
-                    onChange={(e) => {
-                      setRecoveryError(null);
-                      setRecoveryEmail(e.target.value);
-                    }}
-                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[color:var(--neon-cyan)] mb-4"
-                  />
-                </>
+                    <input
+                      type="email"
+                      placeholder="your@email.com"
+                      value={recoveryEmail}
+                      onChange={(e) => {
+                        setRecoveryError(null);
+                        setRecoveryEmail(e.target.value);
+                      }}
+                      className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[color:var(--neon-cyan)] mb-4"
+                    />
+                  </>
+                )
               )}
 
               {recoveryError && (
@@ -337,6 +372,7 @@ function CardPage() {
                 <button
                   onClick={async () => {
                     setShowEmailRecovery(false);
+                    setEmailRecoveryMode(null);
                     setRecoveryEmail("");
                     setRecoveryError(null);
                     // Now unlock the card
@@ -357,6 +393,7 @@ function CardPage() {
                       setRecoveryBusy(false);
                       if (r.ok) {
                         setShowEmailRecovery(false);
+                        setEmailRecoveryMode(null);
                         alert("Reset link sent (or returned) — check your email.\nIf running locally without SMTP, the reset URL is copied to clipboard.");
                         if (r.resetUrl) {
                           try { await navigator.clipboard.writeText(r.resetUrl); } catch {}
@@ -371,37 +408,50 @@ function CardPage() {
                     {recoveryBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send Reset Link"}
                   </button>
                 ) : (
-                  <button
-                    onClick={async () => {
-                      if (!recoveryEmail.trim()) {
-                        setRecoveryError("Email is required");
-                        return;
-                      }
-                      setRecoveryBusy(true);
-                      const result = await storeEmailFn({
-                        data: { uniqueId: id, token: token || "", email: recoveryEmail },
-                      });
-                      setRecoveryBusy(false);
-                      if (result.ok) {
+                  emailRecoveryMode === "reset" ? (
+                    <button
+                      onClick={() => {
                         setShowEmailRecovery(false);
+                        setEmailRecoveryMode(null);
                         setRecoveryEmail("");
-                        // Now unlock the card
-                        if (token) {
-                          const got = await getWithToken({ data: { uniqueId: id, token } });
-                          if (got.card) setUnlocked(got.card);
+                        setRecoveryError(null);
+                      }}
+                      className="flex-1 px-4 py-3 bg-[color:var(--neon-cyan)] rounded-xl text-sm font-medium text-black hover:brightness-110 transition-all"
+                    >
+                      Contact Admin
+                    </button>
+                  ) : (
+                    <button
+                      onClick={async () => {
+                        if (!recoveryEmail.trim()) {
+                          setRecoveryError("Email is required");
+                          return;
                         }
-                        if (!publicCard.isFirstTime) {
-                          alert("Check your email for PIN reset instructions!");
+                        setRecoveryBusy(true);
+                        const result = await storeEmailFn({
+                          data: { uniqueId: id, token: token || "", email: recoveryEmail },
+                        });
+                        setRecoveryBusy(false);
+                        if (result.ok) {
+                          setShowEmailRecovery(false);
+                          setEmailRecoveryMode(null);
+                          setRecoveryEmail("");
+                          // Now unlock the card
+                          if (token) {
+                            const got = await getWithToken({ data: { uniqueId: id, token } });
+                            if (got.card) setUnlocked(got.card);
+                          }
+                          alert("Recovery email saved.");
+                        } else {
+                          setRecoveryError(result.error || "Failed to save email");
                         }
-                      } else {
-                        setRecoveryError(result.error || "Failed to save email");
-                      }
-                    }}
-                    disabled={recoveryBusy}
-                    className="flex-1 px-4 py-3 bg-[color:var(--neon-cyan)] rounded-xl text-sm font-medium text-black hover:brightness-110 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {recoveryBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save Email"}
-                  </button>
+                      }}
+                      disabled={recoveryBusy}
+                      className="flex-1 px-4 py-3 bg-[color:var(--neon-cyan)] rounded-xl text-sm font-medium text-black hover:brightness-110 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {recoveryBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save Email"}
+                    </button>
+                  )
                 )}
               </div>
             </motion.div>

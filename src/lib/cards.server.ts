@@ -44,6 +44,10 @@ export async function supabaseRestCall<T>(
         Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
       },
     };
+      // If the request uses on_conflict in the query string, ask Supabase to merge duplicates (upsert)
+      if ((options as any).path && String((options as any).path).includes("on_conflict=")) {
+        (options as any).headers.Prefer = "resolution=merge-duplicates";
+      }
 
     let payload = "";
     if (body) {
@@ -89,7 +93,7 @@ export async function supabaseRestCall<T>(
 export async function loadPublicCard(uniqueId: string): Promise<PublicCard | null> {
   const { data, error } = await supabaseRestCall<AdminCardRow[]>(
     "GET",
-    `/rest/v1/cards?unique_id=eq.${encodeURIComponent(uniqueId)}&select=unique_id,student_name,photo_url,is_first_time`
+    `/rest/v1/cards?unique_id=eq.${encodeURIComponent(uniqueId)}&select=unique_id,student_name,photo_url,is_first_time,recovery_email`
   );
 
   if (error || !data || !data[0]) return null;
@@ -100,6 +104,7 @@ export async function loadPublicCard(uniqueId: string): Promise<PublicCard | nul
     studentName: row.student_name,
     photoUrl: row.photo_url,
     isFirstTime: row.is_first_time,
+    recoveryEmail: row.recovery_email || null,
   };
 }
 
@@ -120,6 +125,7 @@ export async function loadUnlockedCard(uniqueId: string): Promise<UnlockedCard |
     driveUrl: row.drive_url,
     spotifyUrl: row.spotify_url,
     videoUrl: row.video_url,
+    recoveryEmail: row.recovery_email || null,
   };
 }
 
@@ -217,7 +223,7 @@ export async function doAdminUpsertCard(payload: Record<string, any>): Promise<{
 }> {
   const { error } = await supabaseRestCall<null>(
     "POST",
-    "/rest/v1/cards",
+    "/rest/v1/cards?on_conflict=unique_id",
     payload
   );
   return { ok: !error, error: error || null };

@@ -24,7 +24,12 @@ export function Dashboard({ card, onLogout, token, cardId }: Props) {
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinBusy, setPinBusy] = useState(false);
   const [showVideoMessage, setShowVideoMessage] = useState(false);
+  const [showEmailEditor, setShowEmailEditor] = useState(false);
+  const [recoveryEmail, setRecoveryEmail] = useState(card.recoveryEmail || "");
+  const [recoveryMsg, setRecoveryMsg] = useState<string | null>(null);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
   const changePinFn = useServerFn(changeCardPin);
+  const storeEmailFn = useServerFn(storeCardRecoveryEmail);
 
   return (
     <motion.div
@@ -226,8 +231,8 @@ export function Dashboard({ card, onLogout, token, cardId }: Props) {
             {/* Change Email (for recovery) */}
             <button
               onClick={() => {
-                setChangePinMode(null);
-                setShowSettings(false);
+                setShowEmailEditor((value) => !value);
+                setRecoveryMsg(null);
               }}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/5 transition-colors border border-white/10 hover:border-white/20 text-left"
             >
@@ -237,6 +242,55 @@ export function Dashboard({ card, onLogout, token, cardId }: Props) {
                 <div className="text-xs text-muted-foreground">{card.recoveryEmail || "Set email for PIN recovery"}</div>
               </div>
             </button>
+
+            {showEmailEditor && (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
+                <input
+                  type="email"
+                  value={recoveryEmail}
+                  onChange={(e) => setRecoveryEmail(e.target.value)}
+                  placeholder="name@email.com"
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[color:var(--neon-cyan)]"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      if (!token || !cardId) return;
+                      if (!recoveryEmail.trim()) {
+                        setRecoveryMsg("Email is required");
+                        return;
+                      }
+                      setRecoveryBusy(true);
+                      setRecoveryMsg(null);
+                      const r = await storeEmailFn({
+                        data: { uniqueId: cardId, token, email: recoveryEmail.trim() },
+                      });
+                      setRecoveryBusy(false);
+                      if (r.ok) {
+                        setRecoveryMsg("Recovery email updated.");
+                      } else {
+                        setRecoveryMsg(r.error || "Failed to update recovery email");
+                      }
+                    }}
+                    disabled={recoveryBusy}
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-[color:var(--neon-cyan)] text-black text-sm font-medium disabled:opacity-50"
+                  >
+                    {recoveryBusy ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Save email"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowEmailEditor(false);
+                      setRecoveryEmail(card.recoveryEmail || "");
+                      setRecoveryMsg(null);
+                    }}
+                    className="px-4 py-2.5 rounded-xl border border-white/10 text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {recoveryMsg && <p className="text-sm text-[color:var(--neon-cyan)]">{recoveryMsg}</p>}
+              </div>
+            )}
             </div>
           </motion.div>
         </motion.div>

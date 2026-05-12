@@ -45,6 +45,7 @@ type Draft = {
   driveUrl: string;
   spotifyUrl: string;
   videoUrl: string;
+  recoveryEmail: string;
 };
 
 const emptyDraft: Draft = {
@@ -54,6 +55,7 @@ const emptyDraft: Draft = {
   driveUrl: "",
   spotifyUrl: "",
   videoUrl: "",
+  recoveryEmail: "",
 };
 
 function AdminPage() {
@@ -114,6 +116,27 @@ function AdminPage() {
     }
   }, []);
 
+  useEffect(() => {
+    const expireAdminSession = () => {
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+      localStorage.removeItem(ADMIN_EMAIL_KEY);
+      setToken(null);
+      setCards(null);
+      setAdminEmail(DEFAULT_ADMIN_EMAIL);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") expireAdminSession();
+    };
+
+    window.addEventListener("pagehide", expireAdminSession);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", expireAdminSession);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
+
   const refresh = async (tok: string) => {
     const r = await listFn({ data: { token: tok } });
     if (r.cards) setCards(r.cards as AdminCardRow[]);
@@ -172,6 +195,7 @@ function AdminPage() {
           driveUrl: draft.driveUrl.trim() || null,
           spotifyUrl: draft.spotifyUrl.trim() || null,
           videoUrl: draft.videoUrl.trim() || null,
+          recoveryEmail: draft.recoveryEmail.trim() || null,
         },
       },
     });
@@ -524,6 +548,13 @@ function AdminPage() {
             onChange={(v) => setDraft({ ...draft, videoUrl: v })}
             placeholder="https://..."
           />
+          <Field
+            label="Recovery email"
+            value={draft.recoveryEmail}
+            onChange={(v) => setDraft({ ...draft, recoveryEmail: v })}
+            placeholder="name@email.com"
+            type="email"
+          />
           <div className="sm:col-span-2 flex flex-wrap justify-end gap-2 mt-2">
             <button
               onClick={() => {
@@ -596,6 +627,7 @@ function AdminPage() {
                       driveUrl: c.drive_url ?? "",
                       spotifyUrl: c.spotify_url ?? "",
                       videoUrl: c.video_url ?? "",
+                      recoveryEmail: c.recovery_email ?? "",
                     });
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   }}
@@ -617,6 +649,9 @@ function AdminPage() {
                 >
                   <Trash2 className="w-3.5 h-3.5" /> Delete
                 </button>
+              </div>
+              <div className="mt-3 text-xs text-muted-foreground">
+                Recovery email: {c.recovery_email || "Not set"}
               </div>
             </div>
           ))}

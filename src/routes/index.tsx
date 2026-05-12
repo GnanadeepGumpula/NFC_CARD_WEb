@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { Sparkles, ScanLine, Shield } from "lucide-react";
+import { useState } from "react";
+import QRCodeScanner from "@/components/QRCodeScanner";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -23,6 +25,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
+  const [showScanner, setShowScanner] = useState(false);
   return (
     <main className="relative min-h-screen flex flex-col items-center justify-center px-6 py-16 overflow-hidden">
       <motion.div
@@ -49,14 +52,13 @@ function Index() {
         </p>
 
         <div className="mt-10 flex flex-col sm:flex-row gap-3 justify-center">
-          <Link
-            to="/card/$id"
-            params={{ id: "demo" }}
+          <button
+            onClick={() => setShowScanner(true)}
             className="glass-strong glow-cyan focus-ring-tv inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-2xl font-medium text-foreground hover:scale-105 transition-transform"
           >
             <ScanLine className="w-4 h-4" />
-            Try the demo card
-          </Link>
+            Scan demo card
+          </button>
           <Link
             to="/admin"
             className="glass focus-ring-tv inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-2xl font-medium text-foreground/90 hover:bg-white/15 transition-colors"
@@ -65,6 +67,29 @@ function Index() {
             Admin
           </Link>
         </div>
+
+        {showScanner && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6">
+            <div className="w-full max-w-md glass rounded-3xl p-6">
+              <QRCodeScanner
+                onDetected={(data) => {
+                  // data expected to be a URL or unique id; open card if contains /card/
+                  try {
+                    if (data.startsWith('http')) {
+                      window.location.href = data;
+                      return;
+                    }
+                    // otherwise assume it's a card id
+                    window.location.href = `/card/${encodeURIComponent(data)}`;
+                  } catch (e) {
+                    window.location.href = `/card/${encodeURIComponent('demo')}`;
+                  }
+                }}
+                onCancel={() => setShowScanner(false)}
+              />
+            </div>
+          </div>
+        )}
       </motion.div>
 
       <motion.div

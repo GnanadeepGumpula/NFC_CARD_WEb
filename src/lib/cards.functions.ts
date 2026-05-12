@@ -109,6 +109,7 @@ const adminCardSchema = z.object({
   driveUrl: z.string().url().max(1000).nullish().or(z.literal("")),
   spotifyUrl: z.string().url().max(1000).nullish().or(z.literal("")),
   videoUrl: z.string().url().max(1000).nullish().or(z.literal("")),
+  recoveryEmail: z.string().email().max(320).nullish().or(z.literal("")),
 });
 
 export const adminListCards = createServerFn({ method: "POST" })
@@ -149,6 +150,7 @@ export const adminUpsertCard = createServerFn({ method: "POST" })
       drive_url: c.driveUrl || null,
       spotify_url: c.spotifyUrl || null,
       video_url: c.videoUrl || null,
+      recovery_email: c.recoveryEmail || null,
       ...(data.resetPin ? { pin_hash: null, is_first_time: true } : {}),
     };
     const result = await doAdminUpsertCard(payload);
