@@ -1,18 +1,24 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import {
-  ADMIN_PASSWORD,
   doAdminDeleteCard,
   doAdminUpsertCard,
   adminLoadAllCards,
   loadPublicCard,
   loadUnlockedCard,
   setupPin,
-  signAdminToken,
-  verifyAdminToken,
+  updatePin,
   verifyPin,
   verifyToken,
+  supabaseRestCall,
 } from "./cards.server";
+import {
+  adminAuthLogin,
+  changeAdminPassword,
+  completeAdminPasswordReset,
+  requestAdminPasswordReset,
+  verifyAdminAccessToken,
+} from "./admin-auth.server";
 
 export const getCardPublic = createServerFn({ method: "POST" })
   .inputValidator((data: { uniqueId: string }) =>
@@ -53,13 +59,16 @@ export const getCardWithToken = createServerFn({ method: "POST" })
 
 // ---------- Admin ----------
 export const adminLogin = createServerFn({ method: "POST" })
-  .inputValidator((data: { password: string }) =>
-    z.object({ password: z.string().min(1).max(200) }).parse(data),
+  .inputValidator((data: { email: string; password: string }) =>
+    z
+      .object({
+        email: z.string().email().max(320),
+        password: z.string().min(1).max(200),
+      })
+      .parse(data),
   )
   .handler(async ({ data }) => {
-    if (data.password !== ADMIN_PASSWORD)
-      return { ok: false as const, error: "Invalid password" };
-    return { ok: true as const, token: signAdminToken() };
+    return adminAuthLogin(data.email, data.password);
   });
 
 const adminCardSchema = z.object({
@@ -76,7 +85,8 @@ export const adminListCards = createServerFn({ method: "POST" })
     z.object({ token: z.string().min(10).max(2000) }).parse(data),
   )
   .handler(async ({ data }) => {
-    if (!verifyAdminToken(data.token)) return { cards: null, error: "Unauthorized" };
+    if (!(await verifyAdminAccessToken(data.token)))
+      return { cards: null, error: "Unauthorized" };
     const cards = await adminLoadAllCards();
     if (!cards) return { cards: null, error: "Failed to load cards" };
     return { cards, error: null };
@@ -98,7 +108,8 @@ export const adminUpsertCard = createServerFn({ method: "POST" })
         .parse(data),
   )
   .handler(async ({ data }) => {
-    if (!verifyAdminToken(data.token)) return { ok: false as const, error: "Unauthorized" };
+    if (!(await verifyAdminAccessToken(data.token)))
+      return { ok: false as const, error: "Unauthorized" };
     const c = data.card;
     const payload = {
       unique_id: c.uniqueId,
@@ -120,7 +131,95 @@ export const adminDeleteCard = createServerFn({ method: "POST" })
       .parse(data),
   )
   .handler(async ({ data }) => {
-    if (!verifyAdminToken(data.token)) return { ok: false as const, error: "Unauthorized" };
+    if (!(await verifyAdminAccessToken(data.token)))
+      return { ok: false as const, error: "Unauthorized" };
     const result = await doAdminDeleteCard(data.uniqueId);
     return result;
+  });
+
+export const requestAdminPasswordResetFn = createServerFn({ method: "POST" })
+  .inputValidator((data: { email: string; redirectTo: string }) =>
+    z
+      .object({
+        email: z.string().email().max(320),
+        redirectTo: z.string().url().max(2000),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => requestAdminPasswordReset(data.email, data.redirectTo));
+
+export const changeAdminPasswordFn = createServerFn({ method: "POST" })
+  .inputValidator((data: { token: string; currentPassword: string; newPassword: string }) =>
+    z
+      .object({
+        token: z.string().min(10).max(2000),
+        currentPassword: z.string().min(1).max(200),
+        newPassword: z.string().min(8).max(200),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) =>
+    changeAdminPassword(data.token, data.currentPassword, data.newPassword),
+  );
+
+export const completeAdminPasswordResetFn = createServerFn({ method: "POST" })
+  .inputValidator((data: { accessToken: string; refreshToken: string; newPassword: string }) =>
+    z
+      .object({
+        accessToken: z.string().min(10).max(4000),
+        refreshToken: z.string().min(10).max(4000),
+        newPassword: z.string().min(8).max(200),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) =>
+    completeAdminPasswordReset(data.accessToken, data.refreshToken, data.newPassword),
+  );
+
+// ---------- Card User Recovery ----------
+export const storeCardRecoveryEmail = createServerFn({ method: "POST" })
+  .inputValidator((data: { uniqueId: string; token: string; email: string }) =>
+    z
+      .object({
+        uniqueId: z.string().min(1).max(64),
+        token: z.string().min(10).max(2000),
+        email: z.string().email().max(320),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    if (!verifyToken(data.token, data.uniqueId)) {
+      return { ok: false as const, error: "Unauthorized" };
+    }
+    // Update card with recovery email
+    const { data: result, error } = await supabaseRestCall<{ updated: number }>(
+      "PATCH",
+      `/rest/v1/cards?unique_id=eq.${encodeURIComponent(data.uniqueId)}`,
+      { recovery_email: data.email }
+    );
+    if (error || !result) return { ok: false as const, error: error || "Failed to update" };
+    return { ok: true as const, error: null };
+  });
+
+export const changeCardPin = createServerFn({ method: "POST" })
+  .inputValidator((data: { uniqueId: string; token: string; currentPin: string; newPin: string }) =>
+    z
+      .object({
+        uniqueId: z.string().min(1).max(64),
+        token: z.string().min(10).max(2000),
+        currentPin: z.string().regex(/^\d{4,6}$/),
+        newPin: z.string().regex(/^\d{4,6}$/),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    if (!verifyToken(data.token, data.uniqueId)) {
+      return { ok: false as const, error: "Unauthorized" };
+    }
+    // Verify current PIN
+    const verify = await verifyPin(data.uniqueId, data.currentPin);
+    if (!verify.ok) return { ok: false as const, error: "Current PIN is incorrect" };
+    // Update with new PIN (not setupPin which is for first-time setup)
+    const update = await updatePin(data.uniqueId, data.newPin);
+    return update;
   });

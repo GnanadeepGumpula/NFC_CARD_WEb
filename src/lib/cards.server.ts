@@ -11,7 +11,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 // Direct REST API calls - avoids Supabase SDK serialization issues
-async function supabaseRestCall<T>(
+export async function supabaseRestCall<T>(
   method: string,
   path: string,
   body?: unknown
@@ -140,6 +140,19 @@ export async function verifyPin(uniqueId: string, pin: string) {
 
   const match = await bcrypt.compare(pin, cards[0].pin_hash);
   if (!match) return { ok: false as const, error: "Incorrect PIN" };
+  return { ok: true as const, token: signToken(uniqueId) };
+}
+
+export async function updatePin(uniqueId: string, newPin: string) {
+  const hash = await bcrypt.hash(newPin, 10);
+
+  const { error } = await supabaseRestCall<null>(
+    "PATCH",
+    `/rest/v1/cards?unique_id=eq.${encodeURIComponent(uniqueId)}`,
+    { pin_hash: hash }
+  );
+
+  if (error) return { ok: false as const, error };
   return { ok: true as const, token: signToken(uniqueId) };
 }
 

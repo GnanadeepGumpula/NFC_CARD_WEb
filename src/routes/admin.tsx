@@ -7,21 +7,36 @@ import {
   adminListCards,
   adminLogin,
   adminUpsertCard,
+  changeAdminPasswordFn,
+  completeAdminPasswordResetFn,
+  requestAdminPasswordResetFn,
 } from "@/lib/cards.functions";
 import type { AdminCardRow } from "@/lib/card-types";
-import { Loader2, LogOut, Plus, Pencil, Trash2, RefreshCw, KeyRound } from "lucide-react";
+import {
+  Loader2,
+  LogOut,
+  Plus,
+  Pencil,
+  Trash2,
+  RefreshCw,
+  KeyRound,
+  Mail,
+  LockKeyhole,
+} from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
     meta: [
-      { title: "Admin · Aura Memory Portal" },
+      { title: "Admin · Signatureday Memory Portal" },
       { name: "robots", content: "noindex" },
     ],
   }),
   component: AdminPage,
 });
 
-const ADMIN_TOKEN_KEY = "aura.admin.tok";
+const ADMIN_TOKEN_KEY = "signatureday.admin.tok";
+const ADMIN_EMAIL_KEY = "signatureday.admin.email";
+const DEFAULT_ADMIN_EMAIL = "admin@signatureday.local";
 
 type Draft = {
   uniqueId: string;
@@ -31,6 +46,7 @@ type Draft = {
   spotifyUrl: string;
   videoUrl: string;
 };
+
 const emptyDraft: Draft = {
   uniqueId: "",
   studentName: "",
@@ -45,8 +61,12 @@ function AdminPage() {
   const listFn = useServerFn(adminListCards);
   const upsertFn = useServerFn(adminUpsertCard);
   const deleteFn = useServerFn(adminDeleteCard);
+  const requestResetFn = useServerFn(requestAdminPasswordResetFn);
+  const changePasswordFn = useServerFn(changeAdminPasswordFn);
+  const completeResetFn = useServerFn(completeAdminPasswordResetFn);
 
   const [token, setToken] = useState<string | null>(null);
+  const [adminEmail, setAdminEmail] = useState(DEFAULT_ADMIN_EMAIL);
   const [password, setPassword] = useState("");
   const [loginErr, setLoginErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -54,10 +74,44 @@ function AdminPage() {
   const [cards, setCards] = useState<AdminCardRow[] | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [changeCurrentPassword, setChangeCurrentPassword] = useState("");
+  const [changeNewPassword, setChangeNewPassword] = useState("");
+  const [changeConfirmPassword, setChangeConfirmPassword] = useState("");
+  const [changePasswordErr, setChangePasswordErr] = useState<string | null>(null);
+  const [changePasswordMsg, setChangePasswordMsg] = useState<string | null>(null);
+
+  const [showResetRequest, setShowResetRequest] = useState(false);
+  const [resetEmail, setResetEmail] = useState(DEFAULT_ADMIN_EMAIL);
+  const [resetRequestErr, setResetRequestErr] = useState<string | null>(null);
+  const [resetRequestMsg, setResetRequestMsg] = useState<string | null>(null);
+
+  const [recoveryAccessToken, setRecoveryAccessToken] = useState<string | null>(null);
+  const [recoveryRefreshToken, setRecoveryRefreshToken] = useState<string | null>(null);
+  const [recoveryPassword, setRecoveryPassword] = useState("");
+  const [recoveryConfirmPassword, setRecoveryConfirmPassword] = useState("");
+  const [recoveryErr, setRecoveryErr] = useState<string | null>(null);
+  const [recoveryMsg, setRecoveryMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = localStorage.getItem(ADMIN_TOKEN_KEY);
-    if (t) setToken(t);
+    const storedToken = localStorage.getItem(ADMIN_TOKEN_KEY);
+    const storedEmail = localStorage.getItem(ADMIN_EMAIL_KEY);
+    if (storedToken) setToken(storedToken);
+    if (storedEmail) {
+      setAdminEmail(storedEmail);
+      setResetEmail(storedEmail);
+    }
+
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const hashType = hashParams.get("type");
+    const accessToken = hashParams.get("access_token");
+    const refreshToken = hashParams.get("refresh_token");
+
+    if (hashType === "recovery" && accessToken && refreshToken) {
+      setRecoveryAccessToken(accessToken);
+      setRecoveryRefreshToken(refreshToken);
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
   }, []);
 
   const refresh = async (tok: string) => {
@@ -66,6 +120,7 @@ function AdminPage() {
     else if (r.error === "Unauthorized") {
       localStorage.removeItem(ADMIN_TOKEN_KEY);
       setToken(null);
+      setCards(null);
     }
   };
 
@@ -78,15 +133,19 @@ function AdminPage() {
     e.preventDefault();
     setBusy(true);
     setLoginErr(null);
-    const r = await loginFn({ data: { password } });
+    const r = await loginFn({ data: { email: adminEmail, password } });
     setBusy(false);
     if (!r.ok) {
       setLoginErr(r.error);
       return;
     }
-    localStorage.setItem(ADMIN_TOKEN_KEY, r.token);
-    setToken(r.token);
+    localStorage.setItem(ADMIN_TOKEN_KEY, r.accessToken);
+    localStorage.setItem(ADMIN_EMAIL_KEY, r.email || adminEmail);
+    setToken(r.accessToken);
+    setAdminEmail(r.email || adminEmail);
     setPassword("");
+    setChangePasswordMsg(null);
+    setResetRequestMsg(null);
   };
 
   const onSave = async (resetPin = false) => {
@@ -123,57 +182,231 @@ function AdminPage() {
     refresh(token);
   };
 
-  if (!token) {
+  const onRequestPasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setResetRequestErr(null);
+    setResetRequestMsg(null);
+    const r = await requestResetFn({
+      data: {
+        email: resetEmail,
+        redirectTo: `${window.location.origin}/admin`,
+      },
+    });
+    setBusy(false);
+    if (!r.ok) {
+      setResetRequestErr(r.error);
+      return;
+    }
+    setShowResetRequest(false);
+    setResetRequestMsg("Password reset email sent. Check your inbox.");
+  };
+
+  const onChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    if (changeNewPassword !== changeConfirmPassword) {
+      setChangePasswordErr("New passwords do not match.");
+      return;
+    }
+    setBusy(true);
+    setChangePasswordErr(null);
+    setChangePasswordMsg(null);
+    const r = await changePasswordFn({
+      data: {
+        token,
+        currentPassword: changeCurrentPassword,
+        newPassword: changeNewPassword,
+      },
+    });
+    setBusy(false);
+    if (!r.ok) {
+      setChangePasswordErr(r.error);
+      return;
+    }
+    setChangeCurrentPassword("");
+    setChangeNewPassword("");
+    setChangeConfirmPassword("");
+    setShowChangePassword(false);
+    setChangePasswordMsg("Password updated successfully.");
+  };
+
+  const onCompleteRecovery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recoveryAccessToken || !recoveryRefreshToken) return;
+    if (recoveryPassword !== recoveryConfirmPassword) {
+      setRecoveryErr("New passwords do not match.");
+      return;
+    }
+    setBusy(true);
+    setRecoveryErr(null);
+    setRecoveryMsg(null);
+    const r = await completeResetFn({
+      data: {
+        accessToken: recoveryAccessToken,
+        refreshToken: recoveryRefreshToken,
+        newPassword: recoveryPassword,
+      },
+    });
+    setBusy(false);
+    if (!r.ok) {
+      setRecoveryErr(r.error);
+      return;
+    }
+    setRecoveryPassword("");
+    setRecoveryConfirmPassword("");
+    setRecoveryAccessToken(null);
+    setRecoveryRefreshToken(null);
+    setRecoveryMsg("Password reset complete. Log in with your new password.");
+  };
+
+  if (recoveryAccessToken && recoveryRefreshToken) {
     return (
       <main className="min-h-screen flex items-center justify-center px-6">
         <motion.form
-          onSubmit={onLogin}
+          onSubmit={onCompleteRecovery}
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 90, damping: 14 }}
           className="glass-strong rounded-3xl p-8 w-full max-w-sm"
         >
-          <h1 className="font-display text-2xl font-semibold mb-2">
-            Admin Shield
-          </h1>
+          <h1 className="font-display text-2xl font-semibold mb-2">Reset password</h1>
           <p className="text-sm text-muted-foreground mb-6">
-            Enter the admin password to manage cards.
+            Create a new password for your admin account.
           </p>
           <input
             type="password"
             autoFocus
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
+            value={recoveryPassword}
+            onChange={(e) => setRecoveryPassword(e.target.value)}
+            placeholder="New password"
             className="w-full glass rounded-xl px-4 py-3 outline-none focus-ring-tv"
           />
-          {loginErr && (
-            <p className="mt-3 text-sm text-[color:var(--neon-pink)]">
-              {loginErr}
-            </p>
+          <input
+            type="password"
+            value={recoveryConfirmPassword}
+            onChange={(e) => setRecoveryConfirmPassword(e.target.value)}
+            placeholder="Confirm new password"
+            className="mt-3 w-full glass rounded-xl px-4 py-3 outline-none focus-ring-tv"
+          />
+          {recoveryErr && (
+            <p className="mt-3 text-sm text-[color:var(--neon-pink)]">{recoveryErr}</p>
+          )}
+          {recoveryMsg && (
+            <p className="mt-3 text-sm text-[color:var(--neon-cyan)]">{recoveryMsg}</p>
           )}
           <button
             disabled={busy}
             type="submit"
             className="mt-5 w-full glass-strong glow-cyan rounded-xl py-3 font-medium hover:scale-[1.02] transition-transform disabled:opacity-50"
           >
-            {busy ? "..." : "Enter"}
+            {busy ? "..." : "Update password"}
           </button>
         </motion.form>
       </main>
     );
   }
 
+  if (!token) {
+    return (
+      <main className="min-h-screen flex items-center justify-center px-6">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 90, damping: 14 }}
+          className="glass-strong rounded-3xl p-8 w-full max-w-md"
+        >
+          <h1 className="font-display text-2xl font-semibold mb-2">Admin Shield</h1>
+          <p className="text-sm text-muted-foreground mb-6">
+            Enter your admin email and password to manage cards.
+          </p>
+          {!showResetRequest ? (
+            <form onSubmit={onLogin}>
+              <input
+                type="email"
+                autoFocus
+                value={adminEmail}
+                onChange={(e) => setAdminEmail(e.target.value)}
+                placeholder="Email"
+                className="w-full glass rounded-xl px-4 py-3 outline-none focus-ring-tv"
+              />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                className="mt-3 w-full glass rounded-xl px-4 py-3 outline-none focus-ring-tv"
+              />
+              {loginErr && (
+                <p className="mt-3 text-sm text-[color:var(--neon-pink)]">{loginErr}</p>
+              )}
+              {resetRequestMsg && (
+                <p className="mt-3 text-sm text-[color:var(--neon-cyan)]">{resetRequestMsg}</p>
+              )}
+              <button
+                disabled={busy}
+                type="submit"
+                className="mt-5 w-full glass-strong glow-cyan rounded-xl py-3 font-medium hover:scale-[1.02] transition-transform disabled:opacity-50"
+              >
+                {busy ? "..." : "Enter"}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={onRequestPasswordReset}>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Email
+                </span>
+                <input
+                  type="email"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  placeholder="Email"
+                  className="w-full glass rounded-xl px-4 py-3 outline-none focus-ring-tv"
+                />
+              </label>
+              {resetRequestErr && (
+                <p className="mt-3 text-sm text-[color:var(--neon-pink)]">{resetRequestErr}</p>
+              )}
+              <button
+                disabled={busy}
+                type="submit"
+                className="mt-5 w-full glass-strong glow-cyan rounded-xl py-3 font-medium hover:scale-[1.02] transition-transform disabled:opacity-50"
+              >
+                {busy ? "..." : "Send reset email"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowResetRequest(false)}
+                className="mt-3 w-full text-sm text-muted-foreground hover:text-foreground"
+              >
+                Back to login
+              </button>
+            </form>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setShowResetRequest((value) => !value)}
+            className="mt-4 w-full text-sm text-muted-foreground hover:text-foreground inline-flex items-center justify-center gap-2"
+          >
+            <Mail className="w-4 h-4" />
+            {showResetRequest ? "Back to login" : "Forgot password?"}
+          </button>
+        </motion.div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen px-4 sm:px-8 py-10 max-w-6xl mx-auto">
-      <header className="flex items-center justify-between mb-8">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
         <div>
           <h1 className="font-display text-3xl font-semibold">Admin Shield</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage your NFC memory portals.
-          </p>
+          <p className="text-sm text-muted-foreground">Manage your NFC memory portals.</p>
+          <p className="mt-1 text-xs text-muted-foreground/80">Signed in as {adminEmail}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => token && refresh(token)}
             className="glass focus-ring-tv rounded-xl p-3"
@@ -182,9 +415,19 @@ function AdminPage() {
             <RefreshCw className="w-4 h-4" />
           </button>
           <button
+            onClick={() => setShowChangePassword((value) => !value)}
+            className="glass focus-ring-tv rounded-xl px-4 py-2.5 flex items-center gap-2 text-sm"
+          >
+            <KeyRound className="w-4 h-4" /> Change password
+          </button>
+          <button
             onClick={() => {
               localStorage.removeItem(ADMIN_TOKEN_KEY);
+              localStorage.removeItem(ADMIN_EMAIL_KEY);
               setToken(null);
+              setCards(null);
+              setAdminEmail(DEFAULT_ADMIN_EMAIL);
+              setShowChangePassword(false);
             }}
             className="glass focus-ring-tv rounded-xl px-4 py-2.5 flex items-center gap-2 text-sm"
           >
@@ -193,7 +436,68 @@ function AdminPage() {
         </div>
       </header>
 
-      <div className="mb-6">
+      {showChangePassword && (
+        <motion.form
+          onSubmit={onChangePassword}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-strong rounded-3xl p-6 mb-8 grid grid-cols-1 sm:grid-cols-2 gap-4"
+        >
+          <div className="sm:col-span-2 flex items-center gap-2 text-sm text-muted-foreground">
+            <LockKeyhole className="w-4 h-4" /> Update your admin password
+          </div>
+          <Field
+            label="Current password"
+            value={changeCurrentPassword}
+            onChange={setChangeCurrentPassword}
+            placeholder="Current password"
+            type="password"
+          />
+          <div className="hidden sm:block" />
+          <Field
+            label="New password"
+            value={changeNewPassword}
+            onChange={setChangeNewPassword}
+            placeholder="New password"
+            type="password"
+          />
+          <Field
+            label="Confirm new password"
+            value={changeConfirmPassword}
+            onChange={setChangeConfirmPassword}
+            placeholder="Confirm new password"
+            type="password"
+          />
+          <div className="sm:col-span-2 flex flex-wrap justify-end gap-2 mt-2">
+            {changePasswordErr && (
+              <p className="mr-auto text-sm text-[color:var(--neon-pink)] self-center">
+                {changePasswordErr}
+              </p>
+            )}
+            {changePasswordMsg && (
+              <p className="mr-auto text-sm text-[color:var(--neon-cyan)] self-center">
+                {changePasswordMsg}
+              </p>
+            )}
+            <button
+              onClick={() => setShowChangePassword(false)}
+              type="button"
+              className="glass rounded-xl px-4 py-2.5 text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={busy}
+              className="glass-strong glow-cyan rounded-xl px-5 py-2.5 text-sm font-medium hover:scale-[1.02] transition-transform disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save password"}
+            </button>
+          </div>
+        </motion.form>
+      )}
+
+      <div className="mb-6 flex flex-wrap gap-3 items-center">
         <button
           onClick={() => {
             setDraft({ ...emptyDraft });
@@ -305,8 +609,7 @@ function AdminPage() {
                 <div className="min-w-0 flex-1">
                   <div className="font-medium truncate">{c.student_name}</div>
                   <div className="text-xs text-muted-foreground truncate">
-                    {c.unique_id} ·{" "}
-                    {c.pin_hash ? "PIN set" : "PIN not set"}
+                    {c.unique_id} · {c.pin_hash ? "PIN set" : "PIN not set"}
                   </div>
                 </div>
               </div>
@@ -357,12 +660,14 @@ function Field({
   onChange,
   placeholder,
   disabled,
+  type = "text",
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  type?: string;
 }) {
   return (
     <label className="flex flex-col gap-1.5">
@@ -370,6 +675,7 @@ function Field({
         {label}
       </span>
       <input
+        type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}

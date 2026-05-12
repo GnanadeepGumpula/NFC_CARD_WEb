@@ -1,14 +1,30 @@
-import { motion } from "framer-motion";
-import { FolderOpen, Music, Play, ExternalLink } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { FolderOpen, Music, Play, ExternalLink, Settings, X, Lock, Mail, Loader2 } from "lucide-react";
 import type { UnlockedCard } from "@/lib/card-types";
 import { useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { changeCardPin, storeCardRecoveryEmail } from "@/lib/cards.functions";
 
-type Props = { card: UnlockedCard; onLogout: () => void };
+type Props = { 
+  card: UnlockedCard; 
+  onLogout: () => void;
+  token?: string | null;
+  cardId?: string;
+};
 
-export function Dashboard({ card, onLogout }: Props) {
+export function Dashboard({ card, onLogout, token, cardId }: Props) {
   const [openSection, setOpenSection] = useState<null | "drive" | "spotify" | "video">(
     null,
   );
+  const [showSettings, setShowSettings] = useState(false);
+  const [changePinMode, setChangePinMode] = useState<"verify" | "new" | "confirm" | null>(null);
+  const [currentPin, setCurrentPin] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinBusy, setPinBusy] = useState(false);
+  const [showVideoMessage, setShowVideoMessage] = useState(false);
+  const changePinFn = useServerFn(changeCardPin);
 
   return (
     <motion.div
@@ -17,7 +33,16 @@ export function Dashboard({ card, onLogout }: Props) {
       transition={{ duration: 0.6 }}
       className="relative w-full max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12"
     >
-      {/* Hero */}
+      {/* Hero with Settings */}
+      <div className="flex justify-end mb-6">
+        <button
+          onClick={() => setShowSettings(!showSettings)}
+          className="p-2 rounded-lg hover:bg-white/5 transition-colors text-muted-foreground hover:text-foreground"
+        >
+          <Settings className="w-5 h-5" />
+        </button>
+      </div>
+
       <motion.div
         initial={{ scale: 0.3, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -109,6 +134,7 @@ export function Dashboard({ card, onLogout }: Props) {
           accent="oklch(0.75 0.22 350)"
           url={card.videoUrl}
           delay={0.3}
+          customAction={() => setShowVideoMessage(true)}
         />
       </div>
 
@@ -120,6 +146,251 @@ export function Dashboard({ card, onLogout }: Props) {
           Lock portal
         </button>
       </div>
+
+      {/* Video Editing Message Popup */}
+      <AnimatePresence>
+        {showVideoMessage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center px-6 z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass rounded-3xl p-8 max-w-md w-full text-center"
+            >
+              <div className="flex justify-center mb-4">
+                <div className="text-4xl">🎬</div>
+              </div>
+              <h2 className="font-display font-semibold text-lg mb-2">Video Under Editing</h2>
+              <p className="text-sm text-muted-foreground mb-6">
+                Your video is currently being edited. We'll notify you as soon as it's ready!
+              </p>
+              <button
+                onClick={() => setShowVideoMessage(false)}
+                className="w-full px-4 py-3 bg-[color:var(--neon-cyan)] rounded-xl text-sm font-medium text-black hover:brightness-110 transition-all"
+              >
+                Got it
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Settings Modal */}
+      <AnimatePresence>
+        {showSettings && token && cardId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center px-6 z-50"
+            onClick={() => setShowSettings(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass rounded-3xl p-8 max-w-md w-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="font-display font-semibold">Account Settings</h3>
+            <button
+              onClick={() => setShowSettings(false)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {/* Change PIN */}
+            <button
+              onClick={() => {
+                setChangePinMode("verify");
+                setPinError(null);
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/5 transition-colors border border-white/10 hover:border-white/20 text-left"
+            >
+              <Lock className="w-4 h-4 text-[color:var(--neon-cyan)]" />
+              <div>
+                <div className="text-sm font-medium">Change PIN</div>
+                <div className="text-xs text-muted-foreground">Update your security code</div>
+              </div>
+            </button>
+
+            {/* Change Email (for recovery) */}
+            <button
+              onClick={() => {
+                setChangePinMode(null);
+                setShowSettings(false);
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/5 transition-colors border border-white/10 hover:border-white/20 text-left"
+            >
+              <Mail className="w-4 h-4 text-[color:var(--neon-violet)]" />
+              <div>
+                <div className="text-sm font-medium">Recovery Email</div>
+                <div className="text-xs text-muted-foreground">{card.recoveryEmail || "Set email for PIN recovery"}</div>
+              </div>
+            </button>
+            </div>
+          </motion.div>
+        </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Change PIN Dialog */}
+      {changePinMode && token && cardId && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center px-6 z-50"
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            className="glass rounded-3xl p-8 max-w-md w-full"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display font-semibold text-lg">Change PIN</h2>
+              <button
+                onClick={() => {
+                  setChangePinMode(null);
+                  setCurrentPin("");
+                  setNewPin("");
+                  setConfirmPin("");
+                  setPinError(null);
+                }}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {changePinMode === "verify" && (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">Enter your current PIN</p>
+                <input
+                  type="password"
+                  placeholder="••••"
+                  value={currentPin}
+                  onChange={(e) => {
+                    setPinError(null);
+                    setCurrentPin(e.target.value.slice(0, 6));
+                  }}
+                  maxLength={6}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[color:var(--neon-cyan)]"
+                />
+                {pinError && (
+                  <p className="text-sm text-[color:var(--neon-pink)]">{pinError}</p>
+                )}
+                <button
+                  onClick={() => {
+                    if (currentPin.length < 4) {
+                      setPinError("PIN must be at least 4 digits");
+                      return;
+                    }
+                    setChangePinMode("new");
+                  }}
+                  className="w-full px-4 py-3 bg-[color:var(--neon-cyan)] rounded-xl text-sm font-medium text-black hover:brightness-110 transition-all"
+                >
+                  Continue
+                </button>
+              </div>
+            )}
+
+            {changePinMode === "new" && (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">Enter your new PIN (4-6 digits)</p>
+                <input
+                  type="password"
+                  placeholder="••••"
+                  value={newPin}
+                  onChange={(e) => {
+                    setPinError(null);
+                    setNewPin(e.target.value.slice(0, 6));
+                  }}
+                  maxLength={6}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[color:var(--neon-cyan)]"
+                />
+                <button
+                  onClick={() => setChangePinMode("confirm")}
+                  className="w-full px-4 py-3 bg-[color:var(--neon-cyan)] rounded-xl text-sm font-medium text-black hover:brightness-110 transition-all"
+                >
+                  Continue
+                </button>
+              </div>
+            )}
+
+            {changePinMode === "confirm" && (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">Confirm your new PIN</p>
+                <input
+                  type="password"
+                  placeholder="••••"
+                  value={confirmPin}
+                  onChange={(e) => {
+                    setPinError(null);
+                    setConfirmPin(e.target.value.slice(0, 6));
+                  }}
+                  maxLength={6}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[color:var(--neon-cyan)]"
+                />
+                {pinError && (
+                  <p className="text-sm text-[color:var(--neon-pink)]">{pinError}</p>
+                )}
+                <button
+                  onClick={async () => {
+                    if (newPin !== confirmPin) {
+                      setPinError("PINs don't match");
+                      return;
+                    }
+                    if (newPin.length < 4) {
+                      setPinError("PIN must be at least 4 digits");
+                      return;
+                    }
+                    setPinBusy(true);
+                    const result = await changePinFn({
+                      data: {
+                        uniqueId: cardId,
+                        token,
+                        currentPin,
+                        newPin,
+                      },
+                    });
+                    setPinBusy(false);
+                    if (result.ok) {
+                      setChangePinMode(null);
+                      setCurrentPin("");
+                      setNewPin("");
+                      setConfirmPin("");
+                      setShowSettings(false);
+                      // Show success message
+                      alert("PIN changed successfully!");
+                    } else {
+                      setPinError(result.error || "Failed to change PIN");
+                    }
+                  }}
+                  disabled={pinBusy}
+                  className="w-full px-4 py-3 bg-[color:var(--neon-cyan)] rounded-xl text-sm font-medium text-black hover:brightness-110 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {pinBusy ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    "Update PIN"
+                  )}
+                </button>
+              </div>
+            )}
+          </motion.div>
+        </motion.div>
+      )}
     </motion.div>
   );
 }
@@ -136,6 +407,7 @@ function TrioCard({
   isOpen,
   onOpen,
   onClose,
+  customAction,
 }: {
   title: string;
   subtitle: string;
@@ -148,10 +420,12 @@ function TrioCard({
   isOpen?: boolean;
   onOpen?: () => void;
   onClose?: () => void;
+  customAction?: () => void;
 }) {
   const disabled = !url;
   const handleClick = () => {
     if (disabled) return;
+    if (customAction) return customAction();
     if (embed && onOpen && !isOpen) return onOpen();
     if (url) window.open(url, "_blank", "noopener,noreferrer");
   };
@@ -233,6 +507,41 @@ function SpotifyEmbed({ url }: { url: string }) {
       loading="lazy"
       className="rounded-xl"
       title="Spotify player"
+    />
+  );
+}
+
+function VideoEmbed({ url }: { url: string }) {
+  // Detect if it's a YouTube URL and convert to embed URL
+  let embedUrl = url;
+  
+  if (url.includes("youtube.com") || url.includes("youtu.be")) {
+    let videoId = "";
+    if (url.includes("youtube.com/watch")) {
+      videoId = url.split("v=")[1]?.split("&")[0] || "";
+    } else if (url.includes("youtu.be")) {
+      videoId = url.split("youtu.be/")[1]?.split("?")[0] || "";
+    }
+    if (videoId) {
+      embedUrl = `https://www.youtube.com/embed/${videoId}`;
+    }
+  } else if (url.includes("vimeo.com")) {
+    const videoId = url.split("/").pop()?.split("?")[0] || "";
+    if (videoId) {
+      embedUrl = `https://player.vimeo.com/video/${videoId}`;
+    }
+  }
+  
+  return (
+    <iframe
+      src={embedUrl}
+      width="100%"
+      height="315"
+      frameBorder={0}
+      allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+      loading="lazy"
+      className="rounded-xl"
+      title="Video player"
     />
   );
 }

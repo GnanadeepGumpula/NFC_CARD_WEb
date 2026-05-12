@@ -5,13 +5,13 @@ import { Sparkles, ScanLine, Shield } from "lucide-react";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Aura — NFC Personal Memory Portal" },
+      { title: "Signatureday — NFC Personal Memory Portal" },
       {
         name: "description",
         content:
           "Tap your NFC card to unlock a private memory portal: photos, music, and video — secured with a personal PIN.",
       },
-      { property: "og:title", content: "Aura — NFC Memory Portal" },
+      { property: "og:title", content: "Signatureday — NFC Memory Portal" },
       {
         property: "og:description",
         content:
@@ -44,7 +44,7 @@ function Index() {
         </h1>
 
         <p className="mt-6 text-fluid-body text-muted-foreground max-w-xl mx-auto">
-          Tap an Aura NFC card to reveal a personal vault of photos, music, and
+          Tap a Signatureday NFC card to reveal a personal vault of photos, music, and
           video — sealed behind your own PIN.
         </p>
 

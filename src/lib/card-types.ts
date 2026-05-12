@@ -3,6 +3,7 @@ export type PublicCard = {
   studentName: string;
   photoUrl: string | null;
   isFirstTime: boolean;
+  recoveryEmail?: string | null;
 };
 
 export type UnlockedCard = PublicCard & {
@@ -21,6 +22,7 @@ export type AdminCardRow = {
   video_url: string | null;
   pin_hash: string | null;
   is_first_time: boolean;
+  recovery_email?: string | null;
   created_at: string;
   updated_at: string;
 };

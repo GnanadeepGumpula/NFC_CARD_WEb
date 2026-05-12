@@ -8,24 +8,25 @@ import {
   getCardWithToken,
   initializePin,
   unlockCard,
+  storeCardRecoveryEmail,
 } from "@/lib/cards.functions";
 import { GlassKeypad } from "@/components/GlassKeypad";
 import { Dashboard } from "@/components/Dashboard";
 import type { PublicCard, UnlockedCard } from "@/lib/card-types";
-import { Loader2, ShieldAlert } from "lucide-react";
+import { Loader2, ShieldAlert, Mail, X } from "lucide-react";
 
 export const Route = createFileRoute("/card/$id")({
   head: ({ params }) => ({
     meta: [
-      { title: `Aura · ${params.id}` },
-      { name: "description", content: "Unlock this Aura NFC memory portal." },
+      { title: `Signatureday · ${params.id}` },
+      { name: "description", content: "Unlock this Signatureday NFC memory portal." },
       { name: "robots", content: "noindex" },
     ],
   }),
   component: CardPage,
 });
 
-const tokenKey = (id: string) => `aura.tok.${id}`;
+const tokenKey = (id: string) => `signatureday.tok.${id}`;
 
 function CardPage() {
   const { id } = useParams({ from: "/card/$id" });
@@ -44,6 +45,11 @@ function CardPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [typed, setTyped] = useState("");
+  const [token, setToken] = useState<string | null>(null);
+  const [showEmailRecovery, setShowEmailRecovery] = useState(false);
+  const [recoveryEmail, setRecoveryEmail] = useState("");
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const fired = useRef(false);
 
   // Load card & try existing token
@@ -54,6 +60,7 @@ function CardPage() {
       if (!card) return;
       const tok = localStorage.getItem(tokenKey(id));
       if (tok) {
+        setToken(tok);
         const r = await getWithToken({ data: { uniqueId: id, token: tok } });
         if (r.card) setUnlocked(r.card);
         else localStorage.removeItem(tokenKey(id));
@@ -117,8 +124,9 @@ function CardPage() {
           colors: ["#5ce1ff", "#b682ff", "#ff6fb5", "#ffffff"],
         });
       }
-      const got = await getWithToken({ data: { uniqueId: id, token: r.token } });
-      if (got.card) setUnlocked(got.card);
+      // Show email recovery setup popup FIRST - don't unlock yet
+      setToken(r.token);
+      setShowEmailRecovery(true);
     } else {
       setBusy(true);
       const r = await unlockFn({ data: { uniqueId: id, pin: value } });
@@ -129,6 +137,7 @@ function CardPage() {
         return;
       }
       localStorage.setItem(tokenKey(id), r.token);
+      setToken(r.token);
       const got = await getWithToken({ data: { uniqueId: id, token: r.token } });
       if (got.card) setUnlocked(got.card);
     }
@@ -174,12 +183,17 @@ function CardPage() {
     return (
       <Dashboard
         card={unlocked}
+        token={token}
+        cardId={id}
         onLogout={() => {
           localStorage.removeItem(tokenKey(id));
           setUnlocked(null);
           setPin("");
           setConfirmPin("");
           setPhase("enter");
+          setToken(null);
+          setShowEmailRecovery(false);
+          setRecoveryEmail("");
         }}
       />
     );
@@ -240,7 +254,132 @@ function CardPage() {
             <Loader2 className="w-5 h-5 animate-spin text-[color:var(--neon-cyan)]" />
           </div>
         )}
+
+        {/* Reset PIN Button - Only for existing users */}
+        {!publicCard?.isFirstTime && (
+          <button
+            onClick={() => setShowEmailRecovery(true)}
+            className="mt-6 text-sm text-[color:var(--neon-cyan)] hover:text-[color:var(--neon-pink)] transition-colors underline-offset-2 hover:underline"
+          >
+            Forgot PIN? Reset it
+          </button>
+        )}
       </motion.div>
+
+      {/* Email Recovery Setup/Reset Popup */}
+      <AnimatePresence>
+        {showEmailRecovery && publicCard && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center px-6 z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass rounded-3xl p-8 max-w-md w-full"
+            >
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <Mail className="w-6 h-6 text-[color:var(--neon-cyan)]" />
+                  <h2 className="font-display font-semibold text-lg">
+                    {publicCard.isFirstTime ? "Secure Your Access" : "Reset PIN"}
+                  </h2>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowEmailRecovery(false);
+                    setRecoveryEmail("");
+                    setRecoveryError(null);
+                  }}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-sm text-muted-foreground mb-6">
+                {publicCard.isFirstTime
+                  ? "Add an email to recover your PIN if you forget it. You can skip this for now."
+                  : "Enter your email to receive a PIN reset link."}
+              </p>
+
+              <input
+                type="email"
+                placeholder="your@email.com"
+                value={recoveryEmail}
+                onChange={(e) => {
+                  setRecoveryError(null);
+                  setRecoveryEmail(e.target.value);
+                }}
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[color:var(--neon-cyan)] mb-4"
+              />
+
+              {recoveryError && (
+                <p className="text-sm text-[color:var(--neon-pink)] mb-4">{recoveryError}</p>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={async () => {
+                    setShowEmailRecovery(false);
+                    setRecoveryEmail("");
+                    setRecoveryError(null);
+                    // Now unlock the card
+                    if (token) {
+                      const got = await getWithToken({ data: { uniqueId: id, token } });
+                      if (got.card) setUnlocked(got.card);
+                    }
+                  }}
+                  className="flex-1 px-4 py-3 rounded-xl text-sm font-medium border border-white/10 hover:bg-white/5 transition-colors"
+                >
+                  {publicCard.isFirstTime ? "Skip for Now" : "Cancel"}
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!recoveryEmail.trim()) {
+                      setRecoveryError("Email is required");
+                      return;
+                    }
+                    setRecoveryBusy(true);
+                    const storeEmail = useServerFn(storeCardRecoveryEmail);
+                    const result = await storeEmail({
+                      data: { uniqueId: id, token: token || "", email: recoveryEmail },
+                    });
+                    setRecoveryBusy(false);
+                    if (result.ok) {
+                      setShowEmailRecovery(false);
+                      setRecoveryEmail("");
+                      // Now unlock the card
+                      if (token) {
+                        const got = await getWithToken({ data: { uniqueId: id, token } });
+                        if (got.card) setUnlocked(got.card);
+                      }
+                      if (!publicCard.isFirstTime) {
+                        alert("Check your email for PIN reset instructions!");
+                      }
+                    } else {
+                      setRecoveryError(result.error || "Failed to save email");
+                    }
+                  }}
+                  disabled={recoveryBusy}
+                  className="flex-1 px-4 py-3 bg-[color:var(--neon-cyan)] rounded-xl text-sm font-medium text-black hover:brightness-110 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {recoveryBusy ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : publicCard.isFirstTime ? (
+                    "Save Email"
+                  ) : (
+                    "Send Reset Link"
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }
