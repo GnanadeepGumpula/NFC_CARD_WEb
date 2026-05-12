@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CardIdRouteImport } from './routes/card.$id'
+import { Route as CardIdResetRouteImport } from './routes/card.$id.reset'
 
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
@@ -28,35 +29,43 @@ const CardIdRoute = CardIdRouteImport.update({
   path: '/card/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CardIdResetRoute = CardIdResetRouteImport.update({
+  id: '/reset',
+  path: '/reset',
+  getParentRoute: () => CardIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
-  '/card/$id': typeof CardIdRoute
+  '/card/$id': typeof CardIdRouteWithChildren
+  '/card/$id/reset': typeof CardIdResetRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
-  '/card/$id': typeof CardIdRoute
+  '/card/$id': typeof CardIdRouteWithChildren
+  '/card/$id/reset': typeof CardIdResetRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
-  '/card/$id': typeof CardIdRoute
+  '/card/$id': typeof CardIdRouteWithChildren
+  '/card/$id/reset': typeof CardIdResetRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/card/$id'
+  fullPaths: '/' | '/admin' | '/card/$id' | '/card/$id/reset'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/card/$id'
-  id: '__root__' | '/' | '/admin' | '/card/$id'
+  to: '/' | '/admin' | '/card/$id' | '/card/$id/reset'
+  id: '__root__' | '/' | '/admin' | '/card/$id' | '/card/$id/reset'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
-  CardIdRoute: typeof CardIdRoute
+  CardIdRoute: typeof CardIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -82,13 +91,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CardIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/card/$id/reset': {
+      id: '/card/$id/reset'
+      path: '/reset'
+      fullPath: '/card/$id/reset'
+      preLoaderRoute: typeof CardIdResetRouteImport
+      parentRoute: typeof CardIdRoute
+    }
   }
 }
+
+interface CardIdRouteChildren {
+  CardIdResetRoute: typeof CardIdResetRoute
+}
+
+const CardIdRouteChildren: CardIdRouteChildren = {
+  CardIdResetRoute: CardIdResetRoute,
+}
+
+const CardIdRouteWithChildren =
+  CardIdRoute._addFileChildren(CardIdRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
-  CardIdRoute: CardIdRoute,
+  CardIdRoute: CardIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

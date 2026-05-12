@@ -133,16 +133,16 @@ function AdminPage() {
     e.preventDefault();
     setBusy(true);
     setLoginErr(null);
-    const r = await loginFn({ data: { email: adminEmail, password } });
+    const r = await loginFn({ data: { password } });
     setBusy(false);
     if (!r.ok) {
       setLoginErr(r.error);
       return;
     }
     localStorage.setItem(ADMIN_TOKEN_KEY, r.accessToken);
-    localStorage.setItem(ADMIN_EMAIL_KEY, r.email || adminEmail);
+    localStorage.setItem(ADMIN_EMAIL_KEY, "");
     setToken(r.accessToken);
-    setAdminEmail(r.email || adminEmail);
+    setAdminEmail("");
     setPassword("");
     setChangePasswordMsg(null);
     setResetRequestMsg(null);
@@ -150,15 +150,25 @@ function AdminPage() {
 
   const onSave = async (resetPin = false) => {
     if (!draft || !token) return;
+    // Basic client-side validation
+    const uid = draft.uniqueId.trim();
+    const name = draft.studentName.trim();
+    if (!uid) return alert("Unique ID is required");
+    if (!name) return alert("Student name is required");
+
+    // Normalize photo URL: if user entered without protocol, assume https
+    let photo = draft.photoUrl.trim();
+    if (photo && !/^https?:\/\//i.test(photo)) photo = `https://${photo}`;
+
     setBusy(true);
     const r = await upsertFn({
       data: {
         token,
         resetPin,
         card: {
-          uniqueId: draft.uniqueId.trim(),
-          studentName: draft.studentName.trim(),
-          photoUrl: draft.photoUrl.trim() || null,
+          uniqueId: uid,
+          studentName: name,
+          photoUrl: photo || null,
           driveUrl: draft.driveUrl.trim() || null,
           spotifyUrl: draft.spotifyUrl.trim() || null,
           videoUrl: draft.videoUrl.trim() || null,
@@ -167,7 +177,7 @@ function AdminPage() {
     });
     setBusy(false);
     if (!r.ok) {
-      alert(r.error);
+      alert(r.error || "Failed to save card");
       return;
     }
     setDraft(null);
@@ -318,81 +328,28 @@ function AdminPage() {
         >
           <h1 className="font-display text-2xl font-semibold mb-2">Admin Shield</h1>
           <p className="text-sm text-muted-foreground mb-6">
-            Enter your admin email and password to manage cards.
+            Admin login: enter the admin password to manage cards.
           </p>
-          {!showResetRequest ? (
-            <form onSubmit={onLogin}>
-              <input
-                type="email"
-                autoFocus
-                value={adminEmail}
-                onChange={(e) => setAdminEmail(e.target.value)}
-                placeholder="Email"
-                className="w-full glass rounded-xl px-4 py-3 outline-none focus-ring-tv"
-              />
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password"
-                className="mt-3 w-full glass rounded-xl px-4 py-3 outline-none focus-ring-tv"
-              />
-              {loginErr && (
-                <p className="mt-3 text-sm text-[color:var(--neon-pink)]">{loginErr}</p>
-              )}
-              {resetRequestMsg && (
-                <p className="mt-3 text-sm text-[color:var(--neon-cyan)]">{resetRequestMsg}</p>
-              )}
-              <button
-                disabled={busy}
-                type="submit"
-                className="mt-5 w-full glass-strong glow-cyan rounded-xl py-3 font-medium hover:scale-[1.02] transition-transform disabled:opacity-50"
-              >
-                {busy ? "..." : "Enter"}
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={onRequestPasswordReset}>
-              <label className="flex flex-col gap-1.5">
-                <span className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Email
-                </span>
-                <input
-                  type="email"
-                  value={resetEmail}
-                  onChange={(e) => setResetEmail(e.target.value)}
-                  placeholder="Email"
-                  className="w-full glass rounded-xl px-4 py-3 outline-none focus-ring-tv"
-                />
-              </label>
-              {resetRequestErr && (
-                <p className="mt-3 text-sm text-[color:var(--neon-pink)]">{resetRequestErr}</p>
-              )}
-              <button
-                disabled={busy}
-                type="submit"
-                className="mt-5 w-full glass-strong glow-cyan rounded-xl py-3 font-medium hover:scale-[1.02] transition-transform disabled:opacity-50"
-              >
-                {busy ? "..." : "Send reset email"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowResetRequest(false)}
-                className="mt-3 w-full text-sm text-muted-foreground hover:text-foreground"
-              >
-                Back to login
-              </button>
-            </form>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setShowResetRequest((value) => !value)}
-            className="mt-4 w-full text-sm text-muted-foreground hover:text-foreground inline-flex items-center justify-center gap-2"
-          >
-            <Mail className="w-4 h-4" />
-            {showResetRequest ? "Back to login" : "Forgot password?"}
-          </button>
+          <form onSubmit={onLogin}>
+            <input
+              autoFocus
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Admin password"
+              className="w-full glass rounded-xl px-4 py-3 outline-none focus-ring-tv"
+            />
+            {loginErr && (
+              <p className="mt-3 text-sm text-[color:var(--neon-pink)]">{loginErr}</p>
+            )}
+            <button
+              disabled={busy}
+              type="submit"
+              className="mt-5 w-full glass-strong glow-cyan rounded-xl py-3 font-medium hover:scale-[1.02] transition-transform disabled:opacity-50"
+            >
+              {busy ? "..." : "Enter"}
+            </button>
+          </form>
         </motion.div>
       </main>
     );
@@ -534,6 +491,21 @@ function AdminPage() {
             onChange={(v) => setDraft({ ...draft, photoUrl: v })}
             placeholder="https://..."
           />
+          {draft.photoUrl.trim() ? (
+            <div className="sm:col-span-2">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">Preview</span>
+              <div className="mt-2 w-full h-48 bg-black/5 rounded-xl flex items-center justify-center overflow-hidden">
+                <img
+                  src={/^https?:\/\//i.test(draft.photoUrl.trim()) ? draft.photoUrl.trim() : `https://${draft.photoUrl.trim()}`}
+                  alt="photo preview"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/fallback-photo.png';
+                  }}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </div>
+          ) : null}
           <Field
             label="Drive URL"
             value={draft.driveUrl}

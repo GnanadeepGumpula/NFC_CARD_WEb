@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { verifyAdminToken } from "./cards.server";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || "";
@@ -81,6 +82,13 @@ export async function adminAuthLogin(email: string, password: string) {
 export async function verifyAdminAccessToken(accessToken: string): Promise<boolean> {
   // Accept local fallback token
   if (accessToken === "local-admin-token") return true;
+
+  // Accept app-signed admin JWTs
+  try {
+    if (verifyAdminToken(accessToken)) return true;
+  } catch {
+    // fall through to supabase check
+  }
 
   const client = createAuthClient();
   const { data, error } = await client.auth.getUser(accessToken);
