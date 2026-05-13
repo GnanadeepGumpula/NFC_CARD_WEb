@@ -23,6 +23,8 @@ import {
   Mail,
   LockKeyhole,
 } from "lucide-react";
+import { PhotoImage } from "@/components/PhotoImage";
+import { normalizePhotoUrl } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -179,9 +181,7 @@ function AdminPage() {
     if (!uid) return alert("Unique ID is required");
     if (!name) return alert("Student name is required");
 
-    // Normalize photo URL: if user entered without protocol, assume https
-    let photo = draft.photoUrl.trim();
-    if (photo && !/^https?:\/\//i.test(photo)) photo = `https://${photo}`;
+    const photo = normalizePhotoUrl(draft.photoUrl);
 
     setBusy(true);
     const r = await upsertFn({
@@ -519,13 +519,12 @@ function AdminPage() {
             <div className="sm:col-span-2">
               <span className="text-xs uppercase tracking-wider text-muted-foreground">Preview</span>
               <div className="mt-2 w-full h-48 bg-black/5 rounded-xl flex items-center justify-center overflow-hidden">
-                <img
-                  src={/^https?:\/\//i.test(draft.photoUrl.trim()) ? draft.photoUrl.trim() : `https://${draft.photoUrl.trim()}`}
+                <PhotoImage
+                  key={draft.photoUrl}
+                  src={draft.photoUrl}
                   alt="photo preview"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = '/fallback-photo.png';
-                  }}
                   className="w-full h-full object-cover"
+                  fallbackText="?"
                 />
               </div>
             </div>
@@ -599,10 +598,12 @@ function AdminPage() {
             <div key={c.id} className="glass rounded-2xl p-5">
               <div className="flex items-center gap-3">
                 {c.photo_url ? (
-                  <img
+                  <PhotoImage
                     src={c.photo_url}
                     alt={c.student_name}
                     className="w-12 h-12 rounded-full object-cover ring-1 ring-white/20"
+                    fallbackText={c.student_name.charAt(0)}
+                    fallbackClassName="rounded-full"
                   />
                 ) : (
                   <div className="w-12 h-12 rounded-full glass flex items-center justify-center font-display">

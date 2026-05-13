@@ -4,6 +4,7 @@ import type { UnlockedCard } from "@/lib/card-types";
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { changeCardPin, storeCardRecoveryEmail } from "@/lib/cards.functions";
+import { PhotoImage } from "@/components/PhotoImage";
 
 type Props = { 
   card: UnlockedCard; 
@@ -56,10 +57,12 @@ export function Dashboard({ card, onLogout, token, cardId }: Props) {
       >
         <div className="relative pulse-ring rounded-full glow-cyan">
           {card.photoUrl ? (
-            <img
+            <PhotoImage
               src={card.photoUrl}
               alt={card.studentName}
               className="h-28 w-28 sm:h-36 sm:w-36 rounded-full object-cover ring-4 ring-[color:var(--neon-cyan)]/60"
+              fallbackText={card.studentName.charAt(0)}
+              fallbackClassName="rounded-full"
             />
           ) : (
             <div className="h-28 w-28 sm:h-36 sm:w-36 rounded-full glass-strong flex items-center justify-center text-4xl font-display">
