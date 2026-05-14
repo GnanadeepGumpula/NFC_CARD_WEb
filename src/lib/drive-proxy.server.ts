@@ -1,7 +1,11 @@
 import { json } from "@tanstack/react-start";
 
 export async function proxyDriveImage(fileId: string): Promise<Response> {
-  const url = `https://drive.google.com/uc?export=view&id=${encodeURIComponent(fileId)}`;
+  if (!fileId.trim()) {
+    return json({ error: "Missing file ID" }, { status: 400 });
+  }
+
+  const url = `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w1600`;
 
   try {
     const response = await fetch(url, {
@@ -15,7 +19,19 @@ export async function proxyDriveImage(fileId: string): Promise<Response> {
       return json({ error: "Failed to fetch image" }, { status: response.status });
     }
 
-    const contentType = response.headers.get("content-type") || "application/octet-stream";
+    const finalUrl = response.url || "";
+    const contentType = response.headers.get("content-type") || "";
+
+    if (finalUrl.includes("accounts.google.com") || !contentType.startsWith("image/")) {
+      return json(
+        {
+          error:
+            "Google Drive returned a login page or non-image response. The file must be shared with anyone who has the link.",
+        },
+        { status: 403 }
+      );
+    }
+
     const buffer = await response.arrayBuffer();
 
     return new Response(buffer, {

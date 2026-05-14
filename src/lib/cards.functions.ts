@@ -228,12 +228,12 @@ export const storeCardRecoveryEmail = createServerFn({ method: "POST" })
       }
     }
     // Update card with recovery email
-    const { data: result, error } = await supabaseRestCall<{ updated: number }>(
+    const { error } = await supabaseRestCall<null>(
       "PATCH",
       `/rest/v1/cards?unique_id=eq.${encodeURIComponent(data.uniqueId)}`,
       { recovery_email: data.email }
     );
-    if (error || !result) return { ok: false as const, error: error || "Failed to update" };
+    if (error) return { ok: false as const, error };
     return { ok: true as const, error: null };
   });
 

@@ -37,7 +37,8 @@ export function PhotoImage({
           <div className="px-3">
             <div className="font-display text-2xl sm:text-3xl">{fallbackText}</div>
             <div className="mt-2 text-[11px] sm:text-xs text-muted-foreground max-w-[14rem]">
-              {errorText}
+              {errorText ||
+                "Paste a Google Drive file share link, not a folder link. The file must be shared with anyone who has the link."}
             </div>
           </div>
         </div>

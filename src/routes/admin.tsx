@@ -513,8 +513,11 @@ function AdminPage() {
             label="Photo URL"
             value={draft.photoUrl}
             onChange={(v) => setDraft({ ...draft, photoUrl: v })}
-            placeholder="https://..."
+            placeholder="https://drive.google.com/file/d/..."
           />
+          <div className="sm:col-span-2 text-xs text-muted-foreground -mt-2">
+            Paste the Google Drive file share link for the actual image. Folder links will not render as images.
+          </div>
           {draft.photoUrl.trim() ? (
             <div className="sm:col-span-2">
               <span className="text-xs uppercase tracking-wider text-muted-foreground">Preview</span>

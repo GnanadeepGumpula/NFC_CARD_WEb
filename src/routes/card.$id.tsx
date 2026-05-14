@@ -72,25 +72,6 @@ function CardPage() {
     })();
   }, [id, getPublic, getWithToken]);
 
-  useEffect(() => {
-    const expireToken = () => {
-      localStorage.removeItem(tokenKey(id));
-      setToken(null);
-      setUnlocked(null);
-    };
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") expireToken();
-    };
-
-    window.addEventListener("pagehide", expireToken);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      window.removeEventListener("pagehide", expireToken);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [id]);
-
   // Typewriter welcome
   useEffect(() => {
     if (!publicCard) return;
@@ -243,7 +224,7 @@ function CardPage() {
           <p className="mt-3 text-muted-foreground text-fluid-body">
             {publicCard.isFirstTime
               ? phase === "enter"
-                ? "Initialize Your Secure Key"
+                ? "SET Your Secure Key"
                 : "Confirm your PIN"
               : "Identity Verification Required"}
           </p>
@@ -433,15 +414,13 @@ function CardPage() {
                         });
                         setRecoveryBusy(false);
                         if (result.ok) {
-                          setShowEmailRecovery(false);
-                          setEmailRecoveryMode(null);
-                          setRecoveryEmail("");
-                          // Now unlock the card
                           if (token) {
                             const got = await getWithToken({ data: { uniqueId: id, token } });
                             if (got.card) setUnlocked(got.card);
                           }
-                          alert("Recovery email saved.");
+                          setShowEmailRecovery(false);
+                          setEmailRecoveryMode(null);
+                          setRecoveryEmail("");
                         } else {
                           setRecoveryError(result.error || "Failed to save email");
                         }
