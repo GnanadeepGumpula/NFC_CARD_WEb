@@ -61,10 +61,10 @@ export async function supabaseRestCall<T>(
       res.on("end", () => {
         try {
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-            const parsed = data ? JSON.parse(data) : null;
+            const parsed = data && data.trim() ? JSON.parse(data) : null;
             resolve({ data: parsed as T, error: null });
           } else {
-            const parsed = data ? JSON.parse(data) : null;
+            const parsed = data && data.trim() ? JSON.parse(data) : null;
             const errorMsg = parsed?.message || `HTTP ${res.statusCode}`;
             console.error(`[Supabase] ${method} ${path} failed: ${errorMsg}`, { parsed });
             resolve({
