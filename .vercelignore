@@ -1,0 +1,14 @@
+.git
+.gitignore
+.vercel
+.output
+dist
+.env.local
+.env.*.local
+node_modules/.cache
+*.md
+DEBUGGING_GUIDE.md
+supabase/migrations/
+test-*.js
+run-migrations.js
+seed-data.js
